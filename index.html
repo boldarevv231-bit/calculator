@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Калькулятор</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Калькулятор">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f8f9ff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111318" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; font-size: 14px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<style>
+/* Layout: one-screen app — display grows, keypad pinned to the bottom (Material You calculator) */
+:root {
+  --bg: #f8f9ff;
+  --fg: #191c20;
+  --muted: #5c5f67;
+  --num: #e5e8f0;   --num-fg: #191c20;
+  --op: #d3e3fd;    --op-fg: #0b1d36;
+  --ac: #ffd8e4;    --ac-fg: #31111d;
+  --eq: #415f91;    --eq-fg: #ffffff;
+  --sci-fg: #44474e;
+  --sheet: #eceef5;
+  --err: #ba1a1a;
+  --accent: #415f91;
+  --font: "Roboto Flex", Roboto, "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111318; --fg: #e2e2e9; --muted: #a4a7b0;
+    --num: #262a30; --num-fg: #e2e2e9;
+    --op: #2b4678;  --op-fg: #d6e3ff;
+    --ac: #5f3a47;  --ac-fg: #ffd9e2;
+    --eq: #aac7ff;  --eq-fg: #0a305f;
+    --sci-fg: #c4c6d0; --sheet: #1c1f25; --err: #ffb4ab; --accent: #aac7ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111318; --fg: #e2e2e9; --muted: #a4a7b0;
+  --num: #262a30; --num-fg: #e2e2e9;
+  --op: #2b4678;  --op-fg: #d6e3ff;
+  --ac: #5f3a47;  --ac-fg: #ffd9e2;
+  --eq: #aac7ff;  --eq-fg: #0a305f;
+  --sci-fg: #c4c6d0; --sheet: #1c1f25; --err: #ffb4ab; --accent: #aac7ff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font);
+  -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+.app {
+  height: 100%; max-width: 460px; margin: 0 auto;
+  display: flex; flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px 12px;
+  position: relative;
+}
+/* ---------- display ---------- */
+.display {
+  flex: 1 1 auto; min-height: 120px; position: relative;
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch;
+  padding: 8px 4px 6px; gap: 2px; overflow: hidden;
+}
+.mode {
+  position: absolute; top: 8px; left: 4px;
+  font-size: 13px; letter-spacing: .08em; color: var(--muted); font-weight: 500;
+}
+.prev {
+  text-align: right; color: var(--muted); font-size: 22px; min-height: 28px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: ltr;
+  transition: opacity .2s;
+}
+.expr {
+  text-align: right; white-space: nowrap; overflow-x: auto; overflow-y: hidden;
+  font-size: 68px; line-height: 1.15; font-weight: 400; letter-spacing: -0.01em;
+  font-variation-settings: "opsz" 144; font-variant-numeric: tabular-nums;
+  scrollbar-width: none; min-height: 1.15em;
+}
+.expr::-webkit-scrollbar { display: none; }
+.expr .caret {
+  display: inline-block; width: 3px; height: .9em; vertical-align: -0.08em; margin-left: 2px;
+  background: var(--accent); border-radius: 2px; animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+.expr.done { animation: rise .28s cubic-bezier(.2,.8,.2,1); }
+@keyframes rise { from { transform: translateY(18px); opacity: .3; } }
+.res {
+  text-align: right; color: var(--muted); font-size: 34px; min-height: 42px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.res.err { color: var(--err); font-size: 20px; line-height: 42px; }
+
+/* ---------- toolbar + scientific strip ---------- */
+.toolbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 2px 0 6px; border-bottom: 1px solid color-mix(in srgb, var(--muted) 22%, transparent);
+  margin-bottom: 6px;
+}
+.icon-btn {
+  width: 44px; height: 44px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--sci-fg); display: grid; place-items: center; cursor: pointer;
+  touch-action: manipulation;
+}
+.icon-btn:active { background: var(--sheet); }
+.icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.sci {
+  display: grid; grid-template-columns: repeat(4, 1fr) 44px; gap: 2px 8px;
+  padding-bottom: 6px;
+}
+.sci button {
+  height: 42px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--sci-fg); font: 400 19px var(--font); cursor: pointer; touch-action: manipulation;
+  transition: background .15s, border-radius .15s;
+}
+.sci button:active { background: var(--sheet); border-radius: 12px; }
+.sci button.on { color: var(--accent); font-weight: 600; }
+.sci .x { display: none; }
+.sci.open .x { display: block; }
+.sci .chev svg { width: 24px; height: 24px; fill: currentColor; transition: transform .25s; vertical-align: middle; }
+.sci.open .chev svg { transform: rotate(180deg); }
+.sci sup { font-size: .6em; }
+
+/* ---------- keypad ---------- */
+.keys {
+  flex: 0 0 auto; height: min(56vh, 470px);
+  display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(5, 1fr);
+  gap: 10px;
+}
+.key {
+  border: 0; border-radius: 999px; cursor: pointer; touch-action: manipulation;
+  font: 400 32px var(--font); font-variation-settings: "opsz" 48;
+  background: var(--num); color: var(--num-fg);
+  display: grid; place-items: center;
+  transition: border-radius .18s cubic-bezier(.2,.8,.2,1), filter .15s;
+}
+.key:active, .key.pressed { border-radius: 26%; filter: brightness(.94); }
+:root[data-theme="dark"] .key:active { filter: brightness(1.2); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .key:active { filter: brightness(1.2); } }
+.key.op { background: var(--op); color: var(--op-fg); font-size: 36px; }
+.key.fn { background: var(--op); color: var(--op-fg); font-size: 28px; }
+.key.ac { background: var(--ac); color: var(--ac-fg); font-size: 28px; font-weight: 500; }
+.key.eq { background: var(--eq); color: var(--eq-fg); font-size: 38px; }
+.key svg { width: 30px; height: 30px; fill: currentColor; }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- history sheet ---------- */
+.history {
+  position: absolute; inset: 0; z-index: 5; background: var(--bg);
+  display: flex; flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px 12px;
+  transform: translateY(-100%); transition: transform .3s cubic-bezier(.2,.8,.2,1);
+  visibility: hidden;
+}
+.history.open { transform: none; visibility: visible; }
+.history header { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; }
+.history h2 { font-size: 22px; font-weight: 500; margin: 0; flex: 1; }
+.history ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+.history li button {
+  width: 100%; text-align: right; border: 0; background: transparent; color: var(--fg);
+  padding: 14px 8px; border-bottom: 1px solid color-mix(in srgb, var(--muted) 18%, transparent);
+  font-family: var(--font); cursor: pointer; display: grid; gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.history li button:active { background: var(--sheet); }
+.history .h-expr { color: var(--muted); font-size: 18px; overflow-wrap: anywhere; }
+.history .h-res { font-size: 28px; overflow-wrap: anywhere; }
+.history .empty { color: var(--muted); text-align: center; padding: 48px 0; font-size: 16px; }
+.clear-btn {
+  align-self: center; margin-top: 10px; border: 0; border-radius: 999px;
+  background: var(--op); color: var(--op-fg); font: 500 16px var(--font);
+  padding: 12px 22px; cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media (max-height: 640px) { .keys { height: 52vh; } .expr { font-size: 52px; } }
+</style>
+
+<div class="app" id="app">
+  <section class="display" aria-live="polite">
+    <span class="mode" id="mode">DEG</span>
+    <div class="prev" id="prev"></div>
+    <div class="expr" id="expr"></div>
+    <div class="res" id="res"></div>
+  </section>
+
+  <div class="toolbar">
+    <button class="icon-btn" id="histBtn" aria-label="История">
+      <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 0 0-9 9H1l3.9 3.9.07.14L9 12H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+    </button>
+    <button class="icon-btn" id="themeBtn" aria-label="Сменить тему">
+      <svg viewBox="0 0 24 24"><path d="M12 22A10 10 0 0 1 12 2a10 10 0 0 1 0 20zm0-2V4a8 8 0 0 0 0 16z"/></svg>
+    </button>
+  </div>
+
+  <div class="sci" id="sci">
+    <button data-k="sqrt" id="kSqrt">√</button>
+    <button data-k="π">π</button>
+    <button data-k="^">^</button>
+    <button data-k="!">!</button>
+    <button class="chev" id="chev" aria-label="Инженерный режим"><svg viewBox="0 0 24 24"><path d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg></button>
+
+    <button class="x" data-k="angle" id="kAngle">DEG</button>
+    <button class="x" data-k="sin" id="kSin">sin</button>
+    <button class="x" data-k="cos" id="kCos">cos</button>
+    <button class="x" data-k="tan" id="kTan">tan</button>
+    <span class="x"></span>
+
+    <button class="x" data-k="inv" id="kInv">INV</button>
+    <button class="x" data-k="e">e</button>
+    <button class="x" data-k="ln" id="kLn">ln</button>
+    <button class="x" data-k="log" id="kLog">log</button>
+    <span class="x"></span>
+  </div>
+
+  <div class="keys" id="keys">
+    <button class="key ac" data-k="AC">AC</button>
+    <button class="key fn" data-k="()">( )</button>
+    <button class="key fn" data-k="%">%</button>
+    <button class="key op" data-k="÷" aria-label="Разделить">÷</button>
+
+    <button class="key" data-k="7">7</button>
+    <button class="key" data-k="8">8</button>
+    <button class="key" data-k="9">9</button>
+    <button class="key op" data-k="×" aria-label="Умножить">×</button>
+
+    <button class="key" data-k="4">4</button>
+    <button class="key" data-k="5">5</button>
+    <button class="key" data-k="6">6</button>
+    <button class="key op" data-k="−" aria-label="Минус">−</button>
+
+    <button class="key" data-k="1">1</button>
+    <button class="key" data-k="2">2</button>
+    <button class="key" data-k="3">3</button>
+    <button class="key op" data-k="+" aria-label="Плюс">+</button>
+
+    <button class="key" data-k="0">0</button>
+    <button class="key" data-k=".">,</button>
+    <button class="key" data-k="back" aria-label="Стереть">
+      <svg viewBox="0 0 24 24"><path d="M22 3H7c-.69 0-1.23.35-1.59.88L0 12l5.41 8.11c.36.53.9.89 1.59.89h15c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H7.07L2.4 12l4.66-7H22v14zm-11.59-2L14 13.41 17.59 17 19 15.59 15.41 12 19 8.41 17.59 7 14 10.59 10.41 7 9 8.41 12.59 12 9 15.59z"/></svg>
+    </button>
+    <button class="key eq" data-k="=" aria-label="Равно">=</button>
+  </div>
+
+  <section class="history" id="history" aria-label="История">
+    <header>
+      <h2>История</h2>
+      <button class="icon-btn" id="histClose" aria-label="Закрыть">
+        <svg viewBox="0 0 24 24"><path d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+      </button>
+    </header>
+    <ul id="histList"></ul>
+    <button class="clear-btn" id="histClear">Очистить историю</button>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const exprEl = $('expr'), resEl = $('res'), prevEl = $('prev');
+
+  let tokens = [];
+  let justEvaluated = false;
+  let deg = true, inv = false;
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem('calc-history') || '[]'); } catch (e) { history = []; }
+
+  // ---------- token helpers ----------
+  const OPS = ['+', '−', '×', '÷', '^'];
+  const FUNC_LABEL = { 'sin(': 'sin(', 'cos(': 'cos(', 'tan(': 'tan(', 'asin(': 'sin⁻¹(', 'acos(': 'cos⁻¹(', 'atan(': 'tan⁻¹(', 'ln(': 'ln(', 'log(': 'log(' };
+  const isDigit = t => /^[0-9.]$/.test(t);
+  const isNumTok = t => isDigit(t) || (t && t[0] === '#');
+  const isFunc = t => t in FUNC_LABEL;
+  const isOpen = t => t === '(' || isFunc(t);
+  const last = () => tokens[tokens.length - 1];
+  const closable = t => t !== undefined && (isNumTok(t) || t === 'π' || t === 'e' || t === ')' || t === '!' || t === '%');
+  const openCount = () => tokens.reduce((n, t) => n + (isOpen(t) ? 1 : t === ')' ? -1 : 0), 0);
+
+  // ---------- number formatting ----------
+  function formatNumber(v) {
+    if (!isFinite(v)) throw { code: 'big' };
+    if (Object.is(v, -0) || Math.abs(v) < 1e-300) return '0';
+    const a = Math.abs(v);
+    let s = String(parseFloat(v.toPrecision(12)));
+    if (a >= 1e15 || a < 1e-9 || s.includes('e')) {
+      s = v.toExponential(9).replace(/\.?0+e/, 'e');
+    }
+    return s;
+  }
+  function groupInt(int) { return int.replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+  function displayNumber(s) {
+    let exp = '';
+    const m = s.match(/e([+-]?\d+)$/);
+    if (m) { exp = 'E' + m[1].replace('+', ''); s = s.slice(0, m.index); }
+    let neg = s[0] === '-'; if (neg) s = s.slice(1);
+    const [i, f] = s.split('.');
+    return (neg ? '−' : '') + groupInt(i) + (f !== undefined ? ',' + f : '') + exp;
+  }
+
+  function render(toks) {
+    let out = '', run = '';
+    const flush = () => { if (run) { out += displayNumber(run); run = ''; } };
+    for (const t of toks) {
+      if (isDigit(t)) { run += t; continue; }
+      flush();
+      if (t[0] === '#') out += displayNumber(t.slice(1));
+      else if (t === 'sqrt') out += '√';
+      else out += FUNC_LABEL[t] || t;
+    }
+    flush();
+    return out;
+  }
+
+  // ---------- parser ----------
+  function lex(toks) {
+    const lx = []; let run = '';
+    const flush = () => {
+      if (run) {
+        if ((run.match(/\./g) || []).length > 1 || run === '.') throw { code: 'syntax' };
+        lx.push({ t: 'num', v: parseFloat(run) }); run = '';
+      }
+    };
+    for (const t of toks) {
+      if (isDigit(t)) { run += t; continue; }
+      flush();
+      if (t[0] === '#') lx.push({ t: 'num', v: parseFloat(t.slice(1)) });
+      else lx.push({ t: 'sym', v: t });
+    }
+    flush();
+    return lx;
+  }
+
+  function evaluate(toks) {
+    const lx = lex(toks);
+    let i = 0;
+    const peek = () => lx[i];
+    const is = v => lx[i] && lx[i].t === 'sym' && lx[i].v === v;
+    const toRad = x => deg ? x * Math.PI / 180 : x;
+    const fromRad = x => deg ? x * 180 / Math.PI : x;
+    const snap = x => Math.abs(x) < 1e-12 ? 0 : x;
+    const startsPrimary = t => t && (t.t === 'num' || ['π', 'e', '(', 'sqrt'].includes(t.v) || isFunc(t.v));
+
+    function expr() {
+      let left = term();
+      while (is('+') || is('−')) {
+        const op = lx[i++].v;
+        const r = term();
+        const rv = r.pct ? left.v * r.v : r.v;
+        left = { v: op === '+' ? left.v + rv : left.v - rv };
+      }
+      return left;
+    }
+    function term() {
+      let left = unary();
+      for (;;) {
+        if (is('×') || is('÷')) {
+          const op = lx[i++].v; const r = unary();
+          if (op === '÷' && r.v === 0) throw { code: 'div0' };
+          left = { v: op === '×' ? left.v * r.v : left.v / r.v };
+        } else if (startsPrimary(peek())) {
+          left = { v: left.v * unary().v };
+        } else break;
+      }
+      return left;
+    }
+    function unary() {
+      if (is('−')) { i++; const r = unary(); return { v: -r.v, pct: r.pct }; }
+      if (is('+')) { i++; return unary(); }
+      return power();
+    }
+    function power() {
+      const b = postfix();
+      if (is('^')) { i++; const e = unary(); return { v: Math.pow(b.v, e.v) }; }
+      return b;
+    }
+    function postfix() {
+      let p = primary();
+      while (is('!') || is('%')) {
+        if (lx[i++].v === '!') p = { v: fact(p.v) };
+        else p = { v: p.v / 100, pct: true };
+      }
+      return p;
+    }
+    function primary() {
+      const t = lx[i++];
+      if (!t) throw { code: 'incomplete' };
+      if (t.t === 'num') return { v: t.v };
+      if (t.v === 'π') return { v: Math.PI };
+      if (t.v === 'e') return { v: Math.E };
+      if (t.v === '(') { const r = expr(); if (is(')')) i++; return { v: r.v }; }
+      if (t.v === 'sqrt') { const r = power(); if (r.v < 0) throw { code: 'domain' }; return { v: Math.sqrt(r.v) }; }
+      if (isFunc(t.v)) {
+        const x = expr().v; if (is(')')) i++;
+        switch (t.v) {
+          case 'sin(': return { v: snap(Math.sin(toRad(x))) };
+          case 'cos(': return { v: snap(Math.cos(toRad(x))) };
+          case 'tan(': {
+            if (deg && Math.abs(((x % 180) + 180) % 180 - 90) < 1e-12) throw { code: 'domain' };
+            return { v: snap(Math.tan(toRad(x))) };
+          }
+          case 'asin(': if (x < -1 || x > 1) throw { code: 'domain' }; return { v: fromRad(Math.asin(x)) };
+          case 'acos(': if (x < -1 || x > 1) throw { code: 'domain' }; return { v: fromRad(Math.acos(x)) };
+          case 'atan(': return { v: fromRad(Math.atan(x)) };
+          case 'ln(': if (x <= 0) throw { code: 'domain' }; return { v: Math.log(x) };
+          case 'log(': if (x <= 0) throw { code: 'domain' }; return { v: Math.log10(x) };
+        }
+      }
+      throw { code: 'syntax' };
+    }
+    function fact(n) {
+      if (n < 0 || !Number.isInteger(n)) throw { code: 'domain' };
+      if (n > 170) throw { code: 'big' };
+      let r = 1; for (let k = 2; k <= n; k++) r *= k; return r;
+    }
+
+    if (!lx.length) throw { code: 'incomplete' };
+    const r = expr();
+    if (i < lx.length) throw { code: 'syntax' };
+    if (isNaN(r.v)) throw { code: 'domain' };
+    if (!isFinite(r.v)) throw { code: 'big' };
+    return r.v;
+  }
+
+  const ERR = {
+    div0: 'Нельзя делить на ноль',
+    domain: 'Недопустимое значение',
+    big: 'Слишком большое число',
+    syntax: 'Неверный формат',
+    incomplete: 'Неверный формат'
+  };
+
+  // ---------- view ----------
+  function fit() {
+    const max = window.innerHeight < 640 ? 52 : 68, min = 34;
+    let size = max;
+    exprEl.style.fontSize = size + 'px';
+    while (exprEl.scrollWidth > exprEl.clientWidth && size > min) {
+      size -= 2; exprEl.style.fontSize = size + 'px';
+    }
+    exprEl.scrollLeft = exprEl.scrollWidth;
+  }
+
+  function update(errMsg) {
+    exprEl.innerHTML = '';
+    exprEl.append(document.createTextNode(tokens.length ? render(tokens) : (justEvaluated ? '0' : '')));
+    if (!justEvaluated) { const c = document.createElement('span'); c.className = 'caret'; exprEl.append(c); }
+    if (!justEvaluated) prevEl.textContent = '';
+    resEl.classList.toggle('err', !!errMsg);
+    if (errMsg) { resEl.textContent = errMsg; }
+    else {
+      resEl.textContent = '';
+      const hasOp = tokens.some(t => !isDigit(t) && t[0] !== '#');
+      if (!justEvaluated && hasOp) {
+        try { resEl.textContent = displayNumber(formatNumber(evaluate(tokens))); } catch (e) { /* no preview */ }
+      }
+    }
+    fit();
+  }
+
+  function continueFromResult(keepResult) {
+    if (!justEvaluated) return;
+    justEvaluated = false;
+    prevEl.textContent = '';
+    if (!keepResult) tokens = [];
+  }
+
+  // ---------- input ----------
+  function press(k) {
+    switch (k) {
+      case 'AC': tokens = []; justEvaluated = false; prevEl.textContent = ''; return update();
+      case 'back':
+        if (justEvaluated) { justEvaluated = false; tokens = []; prevEl.textContent = ''; }
+        else tokens.pop();
+        return update();
+      case '=': return equals();
+      case 'inv': inv = !inv; return syncSci();
+      case 'angle': deg = !deg; syncSci(); return update();
+    }
+
+    if (/^[0-9]$/.test(k)) {
+      continueFromResult(false);
+      tokens.push(k);
+      return update();
+    }
+    if (k === '.') {
+      continueFromResult(false);
+      let j = tokens.length - 1, run = '';
+      while (j >= 0 && isDigit(tokens[j])) run = tokens[j--] + run;
+      if (run.includes('.') || (tokens[j + 1] === undefined && last() && last()[0] === '#')) return;
+      if (!run) tokens.push('0');
+      tokens.push('.');
+      return update();
+    }
+    if (OPS.includes(k)) {
+      continueFromResult(true);
+      const l = last();
+      if (l === undefined || isOpen(l) || l === 'sqrt') {
+        if (k === '−') tokens.push(k);
+        return update();
+      }
+      if (OPS.includes(l)) {
+        if (k === '−' && ['×', '÷', '^'].includes(l)) tokens.push(k);
+        else {
+          tokens.pop();
+          const l2 = last();
+          if (l2 !== undefined && OPS.includes(l2)) tokens.pop();
+          if (tokens.length) tokens.push(k);
+        }
+        return update();
+      }
+      tokens.push(k);
+      return update();
+    }
+    if (k === '%' || k === '!') {
+      continueFromResult(true);
+      if (closable(last())) tokens.push(k);
+      return update();
+    }
+    if (k === '()') {
+      continueFromResult(true);
+      if (openCount() > 0 && closable(last())) tokens.push(')');
+      else tokens.push('(');
+      return update();
+    }
+    if (k === 'π' || k === 'e') { continueFromResult(false); tokens.push(k); return update(); }
+    if (k === 'sqrt') {
+      if (inv) { continueFromResult(true); if (closable(last())) tokens.push('^', '2'); return update(); }
+      continueFromResult(false); tokens.push('sqrt'); return update();
+    }
+    if (['sin', 'cos', 'tan'].includes(k)) {
+      continueFromResult(false); tokens.push((inv ? 'a' : '') + k + '('); return update();
+    }
+    if (k === 'ln') {
+      continueFromResult(false);
+      if (inv) tokens.push('e', '^'); else tokens.push('ln(');
+      return update();
+    }
+    if (k === 'log') {
+      continueFromResult(false);
+      if (inv) tokens.push('1', '0', '^'); else tokens.push('log(');
+      return update();
+    }
+  }
+
+  function equals() {
+    if (justEvaluated || !tokens.length) return;
+    let v;
+    try { v = evaluate(tokens); }
+    catch (e) { return update(ERR[e.code] || ERR.syntax); }
+    let s;
+    try { s = formatNumber(v); } catch (e) { return update(ERR.big); }
+    const exprText = render(tokens);
+    history.unshift({ tokens: tokens.slice(), expr: exprText, res: s });
+    history = history.slice(0, 100);
+    try { localStorage.setItem('calc-history', JSON.stringify(history)); } catch (e) {}
+    tokens = ['#' + s];
+    justEvaluated = true;
+    prevEl.textContent = exprText + ' =';
+    update();
+    exprEl.classList.remove('done'); void exprEl.offsetWidth; exprEl.classList.add('done');
+  }
+
+  function syncSci() {
+    $('mode').textContent = deg ? 'DEG' : 'RAD';
+    $('kAngle').textContent = deg ? 'DEG' : 'RAD';
+    $('kInv').classList.toggle('on', inv);
+    $('kSin').innerHTML = inv ? 'sin<sup>−1</sup>' : 'sin';
+    $('kCos').innerHTML = inv ? 'cos<sup>−1</sup>' : 'cos';
+    $('kTan').innerHTML = inv ? 'tan<sup>−1</sup>' : 'tan';
+    $('kLn').innerHTML = inv ? 'e<sup>x</sup>' : 'ln';
+    $('kLog').innerHTML = inv ? '10<sup>x</sup>' : 'log';
+    $('kSqrt').innerHTML = inv ? 'x<sup>2</sup>' : '√';
+  }
+
+  // ---------- history ----------
+  function renderHistory() {
+    const ul = $('histList'); ul.innerHTML = '';
+    $('histClear').hidden = !history.length;
+    if (!history.length) {
+      const li = document.createElement('li'); li.className = 'empty';
+      li.textContent = 'Здесь появятся ваши вычисления'; ul.append(li); return;
+    }
+    for (const h of history) {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      const e = document.createElement('span'); e.className = 'h-expr'; e.textContent = h.expr + ' =';
+      const r = document.createElement('span'); r.className = 'h-res'; r.textContent = displayNumber(h.res);
+      b.append(e, r);
+      b.addEventListener('click', () => {
+        tokens = h.tokens.slice(); justEvaluated = false; prevEl.textContent = '';
+        closeHistory(); update();
+      });
+      li.append(b); ul.append(li);
+    }
+  }
+  function openHistory() { renderHistory(); $('history').classList.add('open'); }
+  function closeHistory() { $('history').classList.remove('open'); }
+
+  // ---------- wiring ----------
+  document.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', () => press(b.dataset.k)));
+  $('chev').addEventListener('click', () => { $('sci').classList.toggle('open'); fit(); });
+  $('histBtn').addEventListener('click', openHistory);
+  $('histClose').addEventListener('click', closeHistory);
+  $('histClear').addEventListener('click', () => {
+    history = []; try { localStorage.removeItem('calc-history'); } catch (e) {}
+    renderHistory();
+  });
+  $('themeBtn').addEventListener('click', () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('calc-theme', root.dataset.theme); } catch (e) {}
+  });
+  try { const t = localStorage.getItem('calc-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+  const KEYMAP = { '*': '×', 'x': '×', '/': '÷', '-': '−', '+': '+', 'Enter': '=', '=': '=', 'Backspace': 'back',
+    'Delete': 'AC', 'Escape': 'AC', ',': '.', '.': '.', '%': '%', '^': '^', '!': '!', 'p': 'π' };
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    let k = e.key;
+    if (/^[0-9]$/.test(k)) { press(k); }
+    else if (k === '(' || k === ')') { press('()'); }
+    else if (KEYMAP[k]) { press(KEYMAP[k]); }
+    else return;
+    e.preventDefault();
+    const btn = document.querySelector(`.key[data-k="${CSS.escape(KEYMAP[k] || k)}"]`);
+    if (btn) { btn.classList.add('pressed'); setTimeout(() => btn.classList.remove('pressed'), 120); }
+  });
+  window.addEventListener('resize', fit);
+
+  // Open with a worked example so the display isn't empty.
+  tokens = ['1', '2', '5', '0', '×', '1', '2', '%'];
+  syncSci();
+  update();
+})();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
